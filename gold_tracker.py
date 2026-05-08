@@ -198,7 +198,7 @@ def calc_max_pain(calls_dict, puts_dict):
             if s > test:
                 total += (s - test) * v["oi"]
         pain[test] = total
-    return min(pain, key=pain.get))
+    return min(pain, key=pain.get)
 
 
 # ══════════════════════════════════════════════════════
