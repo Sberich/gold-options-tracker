@@ -184,20 +184,10 @@ def parse_chain(options_list):
 # ══════════════════════════════════════════════════════
 #  6. คำนวณ Max Pain
 # ══════════════════════════════════════════════════════
-def calc_max_pain(calls_dict, puts_dict, current_price=None, pct=0.10):
+def calc_max_pain(calls_dict, puts_dict):
     all_strikes = sorted(set(calls_dict.keys()) | set(puts_dict.keys()))
     if not all_strikes:
         return None
-
-    # ถ้ามี current_price → filter เฉพาะ ±10% รอบราคา
-    if current_price:
-        lo = current_price * (1 - pct)
-        hi = current_price * (1 + pct)
-        all_strikes = [s for s in all_strikes if lo <= s <= hi]
-
-    if not all_strikes:
-        return None
-
     pain = {}
     for test in all_strikes:
         total = 0.0
@@ -208,7 +198,7 @@ def calc_max_pain(calls_dict, puts_dict, current_price=None, pct=0.10):
             if s > test:
                 total += (s - test) * v["oi"]
         pain[test] = total
-    return min(pain, key=pain.get)
+    return min(pain, key=pain.get))
 
 
 # ══════════════════════════════════════════════════════
@@ -488,7 +478,7 @@ def main():
     print(f"🔍 ATM puts:  {sorted(atm_puts.items())}")
 
     # ── คำนวณ ─────────────────────────────────────────
-    max_pain_raw                = calc_max_pain(calls, puts, current_price=use_price, pct=0.10)
+    max_pain_raw                = calc_max_pain(calls, puts)
     call_wall_raw, put_wall_raw = find_walls(calls, puts, use_price, pct=0.15)
     iv_atm                      = get_atm_iv(calls, puts, use_price)
 
