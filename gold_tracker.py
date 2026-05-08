@@ -366,6 +366,11 @@ def main():
     call_wall_raw, put_wall_raw = find_walls(calls, puts, gld_price)
     iv_atm                      = get_atm_iv(calls, puts, gld_price)
 
+    # 👇 เพิ่มตรงนี้
+    print(f"🔍 max_pain_raw: {max_pain_raw}")
+    print(f"🔍 call_wall_raw: {call_wall_raw}")
+    print(f"🔍 put_wall_raw: {put_wall_raw}")
+    
     if gvz_iv:
         iv_atm = gvz_iv
 
