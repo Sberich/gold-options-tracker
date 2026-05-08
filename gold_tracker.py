@@ -350,6 +350,16 @@ def main():
     atm_puts  = {k: v for k, v in puts.items()  if 420 <= k <= 445}
     print(f"🔍 ATM calls: {sorted(atm_calls.items())}")
     print(f"🔍 ATM puts:  {sorted(atm_puts.items())}")
+
+    # ── DEBUG: ดู puts OI เรียงจากมากไปน้อย ──────────
+    puts_sorted = sorted(puts.items(), key=lambda x: x[1]["oi"], reverse=True)[:10]
+    calls_sorted = sorted(calls.items(), key=lambda x: x[1]["oi"], reverse=True)[:10]
+    print(f"🔍 Top puts OI:  {puts_sorted}")
+    print(f"🔍 Top calls OI: {calls_sorted}")
+    print(f"🔍 put_wall_raw before calc: checking puts_below gld={gld_price:.2f}")
+    puts_below = {s: v for s, v in puts.items() if s <= gld_price}
+    puts_below_sorted = sorted(puts_below.items(), key=lambda x: x[1]["oi"], reverse=True)[:5]
+    print(f"🔍 puts_below top5: {puts_below_sorted}")
     
     # ── คำนวณ ─────────────────────────────────────────
     max_pain_raw                = calc_max_pain(calls, puts)
