@@ -169,7 +169,7 @@ def pick_best_expiry(expiry_timestamps):
 # ══════════════════════════════════════════════════════
 #  5. แปลง Options List → Dict by strike
 # ══════════════════════════════════════════════════════
-def parse_chain(options_list, min_oi=50):
+def parse_chain(options_list, min_oi=0):
     result = {}
     for opt in options_list:
         strike = float(opt.get("strike", 0))
@@ -177,13 +177,19 @@ def parse_chain(options_list, min_oi=50):
         vol    = int(opt.get("volume", 0) or 0)
         iv     = float(opt.get("impliedVolatility", 0) or 0)
         oi     = oi if oi > 0 else vol
-
-        # กรอง strike ที่มี OI น้อยเกินไปออก
         if oi < min_oi:
             continue
-
         result[strike] = {"oi": oi, "iv": iv}
     return result
+
+# ใน main() — filter dynamic
+all_oi = [v["oi"] for v in {**calls, **puts}.values()]
+median_oi = sorted(all_oi)[len(all_oi)//2] if all_oi else 0
+min_oi_threshold = max(100, int(median_oi * 0.3))
+
+calls = parse_chain(calls_raw, min_oi=min_oi_threshold)
+puts  = parse_chain(puts_raw,  min_oi=min_oi_threshold)
+print(f"🔍 min_oi threshold: {min_oi_threshold}")
 
 
 # ══════════════════════════════════════════════════════
@@ -479,8 +485,8 @@ def main():
         send_telegram(f"❌ ดึง Options Chain ไม่ได้ ({use_symbol})")
         return
 
-    calls = parse_chain(calls_raw, min_oi=50)
-    puts  = parse_chain(puts_raw,  min_oi=50)
+    calls = parse_chain(calls_raw, min_oi=200)
+    puts  = parse_chain(puts_raw,  min_oi=200)
     print(f"📊 Calls: {len(calls)}, Puts: {len(puts)}")
 
     # ── DEBUG ─────────────────────────────────────────
