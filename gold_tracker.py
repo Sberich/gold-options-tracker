@@ -263,3 +263,33 @@ def main():
 {oi_chart}
 ━━━━━━━━━━━━━━━━━━━
 📋 *COPY → Pine Script Inputs:*
+
+━━━━━━━━━━━━━━━━━━━
+    """
+    
+    send_telegram(msg)
+    print("✅ Done!")
+
+# ── Telegram Sender ──────────────────────────────────
+def send_telegram(message: str):
+    if not TELEGRAM_TOKEN or not CHAT_ID:
+        print("⚠️ TELEGRAM_TOKEN หรือ CHAT_ID ไม่ได้ตั้งค่า")
+        print(message)
+        return
+    
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {
+        "chat_id"    : CHAT_ID,
+        "text"       : message,
+        "parse_mode" : "Markdown"
+    }
+    
+    resp = requests.post(url, json=payload)
+    
+    if resp.status_code == 200:
+        print("✅ Telegram: ส่งสำเร็จ")
+    else:
+        print(f"❌ Telegram error: {resp.text}")
+
+if __name__ == "__main__":
+    main()
