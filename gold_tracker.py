@@ -345,6 +345,12 @@ def main():
     print(f"🔍 Sample calls: {sample_calls}")
     print(f"🔍 Sample puts:  {sample_puts}")
 
+    # 👇 เพิ่มตรงนี้
+    atm_calls = {k: v for k, v in calls.items() if 420 <= k <= 445}
+    atm_puts  = {k: v for k, v in puts.items()  if 420 <= k <= 445}
+    print(f"🔍 ATM calls: {sorted(atm_calls.items())}")
+    print(f"🔍 ATM puts:  {sorted(atm_puts.items())}")
+    
     # ── คำนวณ ─────────────────────────────────────────
     max_pain_raw                = calc_max_pain(calls, puts)
     call_wall_raw, put_wall_raw = find_walls(calls, puts, gld_price)
