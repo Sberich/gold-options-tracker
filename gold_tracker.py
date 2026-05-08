@@ -13,8 +13,6 @@ import time
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 CHAT_ID        = os.environ.get("CHAT_ID", "")
 
-GLD_MULT = 10.0  # GLD × 10 ≈ ราคาทอง
-
 HEADERS = {
     "User-Agent"      : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                         "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -291,29 +289,29 @@ def main():
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     print(f"🚀 Gold Tracker v3 — {now}")
 
-    # ── Init Session (ต้องก่อนทุกอย่าง) ──────────────
+    # ── Init Session ──────────────────────────────────
     init_session()
 
-# ── ราคา GLD ─────────────────────────────────────
-    print("📡 Fetching GLD price...")
-    gld_price = get_price("GLD")
-    if not gld_price:
-        send_telegram("❌ ดึงราคา GLD ไม่ได้ — Yahoo Finance อาจ timeout")
-        return
-
+    # ── ราคาทอง ───────────────────────────────────────
+    print("📡 Fetching Gold price...")
     gold_price = get_price("GC=F")
     if not gold_price:
         gold_price = get_price("XAUUSD=X")
     if not gold_price:
-        gold_price = round(gld_price * 10.0, 1)
-
+        send_telegram("❌ ดึงราคาทองไม่ได้ — Yahoo Finance อาจ timeout")
+        return
     gold_price = round(gold_price, 1)
-    print(f"💰 GLD: {gld_price:.2f} → Gold ~{gold_price}")
+    print(f"💰 Gold Futures (GC=F): {gold_price}")
+
+    # ── GVZ IV ────────────────────────────────────────
+    gvz_iv = get_price("^GVZ")
+    if gvz_iv:
+        gvz_iv = gvz_iv / 100
+        print(f"📈 GVZ IV: {gvz_iv*100:.1f}%")
 
     # ── หา Expiry ─────────────────────────────────────
     print("📅 Fetching expiry list...")
-    expiry_list = get_expiry_list("GLD")
-
+    expiry_list = get_expiry_list("GC=F")
     if not expiry_list:
         send_telegram("❌ ดึง Expiry list ไม่ได้")
         return
@@ -324,8 +322,7 @@ def main():
 
     # ── Options Chain ─────────────────────────────────
     print("📊 Fetching options chain...")
-    calls_raw, puts_raw = get_options_chain("GLD", best_ts)
-
+    calls_raw, puts_raw = get_options_chain("GC=F", best_ts)
     if not calls_raw or not puts_raw:
         send_telegram("❌ ดึง Options Chain ไม่ได้")
         return
@@ -335,21 +332,23 @@ def main():
     print(f"📊 Calls: {len(calls)}, Puts: {len(puts)}")
 
     # ── คำนวณ ─────────────────────────────────────────
-    max_pain_gld              = calc_max_pain(calls, puts)
-    call_wall_gld, put_wall_gld = find_walls(calls, puts, gld_price)
-    iv_atm                    = get_atm_iv(calls, puts, gld_price)
+    max_pain  = calc_max_pain(calls, puts)
+    call_wall, put_wall = find_walls(calls, puts, gold_price)
+    iv_atm    = get_atm_iv(calls, puts, gold_price)
 
-    max_pain  = round(max_pain_gld  * GLD_MULT) if max_pain_gld else None
-    call_wall = round(call_wall_gld * GLD_MULT)
-    put_wall  = round(put_wall_gld  * GLD_MULT)
+    if gvz_iv:
+        iv_atm = gvz_iv
+
     iv_pct    = f"{iv_atm * 100:.1f}%" if iv_atm else "N/A"
+    max_pain  = round(max_pain)  if max_pain  else None
+    call_wall = round(call_wall)
+    put_wall  = round(put_wall)
 
     u1, l1, u2, l2 = calc_range(gold_price, iv_atm, days_left)
 
-    chart = make_chart(calls, puts, gld_price, max_pain_gld,
-                       mult=GLD_MULT, n=10)
+    chart = make_chart(calls, puts, gold_price, max_pain, mult=1.0, n=10)
 
-    pain_str = f"`{max_pain}`" if max_pain else "N/A"
+    pain_str  = f"`{max_pain}`" if max_pain else "N/A"
     r1 = f"`{l1}` — `{u1}`" if u1 else "N/A"
     r2 = f"`{l2}` — `{u2}`" if u2 else "N/A"
 
