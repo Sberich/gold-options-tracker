@@ -355,7 +355,6 @@ def main():
     msg = f"""
 🥇 *GOLD PRO — Options Update*
 📅 `{now}` | Expiry `{exp_str}` ({days_left}d)
-
 ━━━━━━━━━━━━━━━━━━━
 📍 *KEY LEVELS*
 💰 Gold Price:  `{gold_price}`
@@ -363,20 +362,19 @@ def main():
 🟢 Call Wall:   `{call_wall}`
 🔴 Put Wall:    `{put_wall}`
 📈 ATM IV:      `{iv_pct}`
-
 ━━━━━━━━━━━━━━━━━━━
 📐 *EXPECTED RANGE*
 1️⃣  1SD (68%): {r1}
 2️⃣  2SD (95%): {r2}
-
 ━━━━━━━━━━━━━━━━━━━
 {chart}
 ━━━━━━━━━━━━━━━━━━━
 📋 *COPY → Pine Script:*
+```
 fair_value = {pine_fair}
 call_wall  = {pine_call}
 put_wall   = {pine_put}
-'''
+```
 """
 
     send_telegram(msg)
@@ -385,5 +383,3 @@ put_wall   = {pine_put}
 
 if __name__ == "__main__":
     main()
-'''
-
