@@ -205,7 +205,7 @@ def calc_max_pain(calls_dict, puts_dict):
 #  7. หา Call Wall / Put Wall
 #  [FIX 3] filter ±15% รอบราคา → Wall ไม่หนีไปไกล ATM
 # ══════════════════════════════════════════════════════
-def find_walls(calls_dict, puts_dict, current_price, pct=0.15):
+def find_walls(calls_dict, puts_dict, current_price, pct=0.08):
     lo = current_price * (1 - pct)
     hi = current_price * (1 + pct)
 
