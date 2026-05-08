@@ -337,6 +337,12 @@ def main():
     puts  = parse_chain(puts_raw)
     print(f"📊 Calls: {len(calls)}, Puts: {len(puts)}")
 
+    # ── DEBUG: ดู OI จริงๆ ───────────────────────────
+    sample_calls = list(calls.items())[:3]
+    sample_puts  = list(puts.items())[:3]
+    print(f"🔍 Sample calls: {sample_calls}")
+    print(f"🔍 Sample puts:  {sample_puts}")
+
     # ── คำนวณ ─────────────────────────────────────────
     max_pain_raw                = calc_max_pain(calls, puts)
     call_wall_raw, put_wall_raw = find_walls(calls, puts, gld_price)
