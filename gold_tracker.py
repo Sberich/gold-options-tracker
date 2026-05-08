@@ -187,9 +187,21 @@ all_oi = [v["oi"] for v in {**calls, **puts}.values()]
 median_oi = sorted(all_oi)[len(all_oi)//2] if all_oi else 0
 min_oi_threshold = max(100, int(median_oi * 0.3))
 
+# parse ก่อน ไม่ filter
+calls = parse_chain(calls_raw)
+puts  = parse_chain(puts_raw)
+print(f"📊 Calls: {len(calls)}, Puts: {len(puts)}")
+
+# คำนวณ threshold จาก OI จริง
+all_oi = [v["oi"] for v in {**calls, **puts}.values()]
+median_oi = sorted(all_oi)[len(all_oi)//2] if all_oi else 0
+min_oi_threshold = max(100, int(median_oi * 0.3))
+print(f"🔍 min_oi threshold: {min_oi_threshold}")
+
+# filter ใหม่
 calls = parse_chain(calls_raw, min_oi=min_oi_threshold)
 puts  = parse_chain(puts_raw,  min_oi=min_oi_threshold)
-print(f"🔍 min_oi threshold: {min_oi_threshold}")
+print(f"📊 Calls filtered: {len(calls)}, Puts filtered: {len(puts)}")
 
 
 # ══════════════════════════════════════════════════════
