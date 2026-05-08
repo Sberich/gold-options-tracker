@@ -294,15 +294,20 @@ def main():
     # ── Init Session (ต้องก่อนทุกอย่าง) ──────────────
     init_session()
 
-    # ── ราคา GLD ─────────────────────────────────────
+# ── ราคา GLD ─────────────────────────────────────
     print("📡 Fetching GLD price...")
     gld_price = get_price("GLD")
-
     if not gld_price:
         send_telegram("❌ ดึงราคา GLD ไม่ได้ — Yahoo Finance อาจ timeout")
         return
 
-    gold_price = round(gld_price * GLD_MULT, 1)
+    gold_price = get_price("GC=F")
+    if not gold_price:
+        gold_price = get_price("XAUUSD=X")
+    if not gold_price:
+        gold_price = round(gld_price * 10.0, 1)
+
+    gold_price = round(gold_price, 1)
     print(f"💰 GLD: {gld_price:.2f} → Gold ~{gold_price}")
 
     # ── หา Expiry ─────────────────────────────────────
