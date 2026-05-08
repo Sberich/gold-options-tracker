@@ -303,6 +303,12 @@ def main():
     gold_price = round(gold_price, 1)
     print(f"💰 Gold Futures (GC=F): {gold_price}")
 
+    # ── ราคา GLD จริง (ใช้คำนวณ options) ────────────
+    gld_price = get_price("GLD")
+    if not gld_price:
+        gld_price = gold_price / 10
+    print(f"💰 GLD actual: {gld_price:.2f}")
+    
     # ── GVZ IV ────────────────────────────────────────
     gvz_iv = get_price("^GVZ")
     if gvz_iv:
