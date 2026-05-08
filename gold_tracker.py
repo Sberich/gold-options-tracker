@@ -1,7 +1,7 @@
 """
 Gold Options Tracker v5
-✅ Auto Schedule ผ่าน GitHub Actions cron
-✅ Telegram Bot รับคำสั่ง /gold → trigger GitHub Actions
+✅ Auto Schedule (Cron)
+✅ Telegram Bot Command (/gold, /help, /status)
 """
 
 import requests
@@ -10,12 +10,20 @@ from datetime import datetime
 import math
 import os
 import time
+import threading
+import schedule
 
 # ── Config ───────────────────────────────────────────
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 CHAT_ID        = os.environ.get("CHAT_ID", "")
-GH_TOKEN       = os.environ.get("GH_TOKEN", "")
-GH_REPO        = os.environ.get("GH_REPO", "")   # username/repo
+
+# ⏰ ตั้งเวลาส่งอัตโนมัติ (เวลาไทย UTC+7)
+# ปรับได้ตามต้องการ
+AUTO_SCHEDULE = [
+    "08:00",   # เช้า — ก่อนตลาด NY เปิด
+    "13:00",   # บ่าย — กลางช่วง NY
+    "20:00",   # เย็น — ก่อนตลาดปิด
+]
 
 HEADERS = {
     "User-Agent"      : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -29,9 +37,13 @@ SESSION = requests.Session()
 SESSION.headers.update(HEADERS)
 CRUMB   = None
 
+# ── Telegram Polling State ────────────────────────────
+last_update_id = 0
+bot_running    = False
+
 
 # ══════════════════════════════════════════════════════
-#  YAHOO FINANCE FUNCTIONS
+#  YAHOO FINANCE FUNCTIONS (เหมือนเดิม)
 # ══════════════════════════════════════════════════════
 
 def init_session():
@@ -56,12 +68,9 @@ def init_session():
             )
             if resp.status_code == 200 and resp.text.strip():
                 CRUMB = resp.text.strip()
-                print(f"✅ Crumb obtained: {CRUMB[:8]}...")
                 return True
-        except Exception as e:
-            print(f"⚠️ Crumb attempt {attempt+1} failed: {e}")
+        except Exception:
             time.sleep(2)
-    print("❌ Could not obtain crumb")
     return False
 
 
@@ -76,8 +85,7 @@ def get_price(symbol="GLD"):
             data  = resp.json()
             price = data["chart"]["result"][0]["meta"]["regularMarketPrice"]
             return float(price)
-        except Exception as e:
-            print(f"⚠️ get_price attempt {attempt+1} failed: {e}")
+        except Exception:
             time.sleep(3)
     return None
 
@@ -93,8 +101,7 @@ def get_expiry_list(symbol="GLD"):
                 time.sleep(3)
                 continue
             return data["optionChain"]["result"][0]["expirationDates"]
-        except Exception as e:
-            print(f"⚠️ get_expiry attempt {attempt+1} failed: {e}")
+        except Exception:
             time.sleep(3)
     return []
 
@@ -112,15 +119,14 @@ def get_options_chain(symbol="GLD", expiry_ts=None):
             data   = resp.json()
             result = data["optionChain"]["result"][0]["options"][0]
             return result.get("calls", []), result.get("puts", [])
-        except Exception as e:
-            print(f"⚠️ get_chain attempt {attempt+1} failed: {e}")
+        except Exception:
             time.sleep(3)
     return [], []
 
 
 def pick_best_expiry(expiry_timestamps):
-    today     = datetime.now()
-    best_ts   = None
+    today    = datetime.now()
+    best_ts  = None
     best_days = None
     for ts in expiry_timestamps:
         exp_date  = datetime.fromtimestamp(ts)
@@ -228,122 +234,18 @@ def make_chart(calls_dict, puts_dict, current_price, max_pain, mult=1.0, n=10):
 
 
 # ══════════════════════════════════════════════════════
-#  TELEGRAM — ส่งข้อความ
+#  CORE — สร้าง Report
 # ══════════════════════════════════════════════════════
 
-def send_telegram(msg: str, chat_id=None):
-    if not TELEGRAM_TOKEN:
-        print(msg)
-        return False
-    target = chat_id or CHAT_ID
-    if not target:
-        print(msg)
-        return False
-    url  = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    resp = requests.post(url, json={
-        "chat_id"   : target,
-        "text"      : msg,
-        "parse_mode": "Markdown"
-    }, timeout=15)
-    ok = resp.status_code == 200
-    print("✅ Telegram sent!" if ok else f"❌ {resp.text}")
-    return ok
-
-
-# ══════════════════════════════════════════════════════
-#  GITHUB ACTIONS — trigger ผ่าน API
-# ══════════════════════════════════════════════════════
-
-def trigger_github_action():
-    """กด workflow_dispatch ผ่าน GitHub API"""
-    if not GH_TOKEN or not GH_REPO:
-        return False
-    url  = f"https://api.github.com/repos/{GH_REPO}/actions/workflows/gold.yml/dispatches"
-    resp = requests.post(url,
-        headers={
-            "Authorization": f"Bearer {GH_TOKEN}",
-            "Accept"       : "application/vnd.github+json"
-        },
-        json={"ref": "main"},
-        timeout=10
-    )
-    return resp.status_code == 204
-
-
-# ══════════════════════════════════════════════════════
-#  TELEGRAM BOT — รับคำสั่ง /gold
-# ══════════════════════════════════════════════════════
-
-def handle_command(text: str, chat_id: str):
-    text = text.strip().lower()
-
-    if text in ["/gold", "/g"]:
-        send_telegram("⏳ กำลังดึงข้อมูล รอ ~1 นาที...", chat_id)
-        ok = trigger_github_action()
-        if ok:
-            send_telegram("✅ GitHub Actions ทำงานแล้ว\nผลจะส่งมาใน Telegram เดี๋ยวนี้", chat_id)
-        else:
-            send_telegram("❌ Trigger ไม่ได้ — ตรวจสอบ GH_TOKEN และ GH_REPO", chat_id)
-
-    elif text in ["/help", "/start"]:
-        send_telegram(
-            "🥇 *Gold Options Bot*\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "/gold — ดึงข้อมูลทันที\n"
-            "/g    — shortcut /gold\n"
-            "/help — คำสั่งทั้งหมด\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "⏰ อัตโนมัติ: 08:00 / 13:00 / 20:00 น.",
-            chat_id
-        )
-    else:
-        send_telegram("❓ ไม่รู้จักคำสั่ง — ลอง /help", chat_id)
-
-
-def bot_polling():
-    """Long polling — รับคำสั่งจาก Telegram ตลอดเวลา"""
-    last_id = 0
-    print("🤖 Bot polling started — พิมพ์ /gold ใน Telegram ได้เลย")
-
-    while True:
-        try:
-            url  = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates"
-            resp = requests.get(url,
-                params={"offset": last_id, "timeout": 30},
-                timeout=35
-            )
-            for update in resp.json().get("result", []):
-                last_id = update["update_id"] + 1
-                msg     = update.get("message", {})
-                text    = msg.get("text", "")
-                chat_id = str(msg.get("chat", {}).get("id", ""))
-                if text.startswith("/"):
-                    print(f"📩 [{chat_id}] {text}")
-                    handle_command(text, chat_id)
-        except Exception as e:
-            print(f"⚠️ polling error: {e}")
-        time.sleep(1)
-
-
-# ══════════════════════════════════════════════════════
-#  CORE — สร้างและส่ง Report
-# ══════════════════════════════════════════════════════
-
-def main():
+def build_report(trigger="auto"):
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    print(f"🚀 Gold Tracker v5 — {now}")
+    print(f"\n🚀 Gold Tracker v5 — {now} [{trigger}]")
 
-    # ── Init Session ──────────────────────────────────
     init_session()
 
-    # ── ราคาทอง ───────────────────────────────────────
-    print("📡 Fetching Gold price...")
-    gold_price = get_price("GC=F")
+    gold_price = get_price("GC=F") or get_price("XAUUSD=X")
     if not gold_price:
-        gold_price = get_price("XAUUSD=X")
-    if not gold_price:
-        send_telegram("❌ ดึงราคาทองไม่ได้ — Yahoo Finance อาจ timeout")
-        return
+        return "❌ ดึงราคาทองไม่ได้ — Yahoo Finance อาจ timeout"
     gold_price = round(gold_price, 1)
 
     gld_price = get_price("GLD") or gold_price / 10
@@ -352,25 +254,20 @@ def main():
     if gvz_iv:
         gvz_iv = gvz_iv / 100
 
-    # ── หา Expiry ─────────────────────────────────────
     expiry_list = get_expiry_list("GLD")
     if not expiry_list:
-        send_telegram("❌ ดึง Expiry list ไม่ได้")
-        return
+        return "❌ ดึง Expiry list ไม่ได้"
 
     best_ts, days_left = pick_best_expiry(expiry_list)
     exp_str = datetime.fromtimestamp(best_ts).strftime("%Y-%m-%d")
 
-    # ── Options Chain ─────────────────────────────────
     calls_raw, puts_raw = get_options_chain("GLD", best_ts)
     if not calls_raw or not puts_raw:
-        send_telegram("❌ ดึง Options Chain ไม่ได้")
-        return
+        return "❌ ดึง Options Chain ไม่ได้"
 
     calls = parse_chain(calls_raw)
     puts  = parse_chain(puts_raw)
 
-    # ── คำนวณ ─────────────────────────────────────────
     max_pain_raw                = calc_max_pain(calls, puts)
     call_wall_raw, put_wall_raw = find_walls(calls, puts, gld_price)
     iv_atm                      = get_atm_iv(calls, puts, gld_price)
@@ -389,12 +286,15 @@ def main():
     pain_str  = f"`{max_pain}`" if max_pain else "N/A"
     r1        = f"`{l1}` — `{u1}`" if u1 else "N/A"
     r2        = f"`{l2}` — `{u2}`" if u2 else "N/A"
+
     pine_fair = round(max_pain  / 10) * 10 if max_pain else 0
     pine_call = round(call_wall / 10) * 10
     pine_put  = round(put_wall  / 10) * 10
 
+    trigger_icon = "⏰" if trigger == "auto" else "👤"
+
     msg = f"""
-🥇 *GOLD PRO v5 — Options Update*
+🥇 *GOLD PRO v5 — Options Update* {trigger_icon}
 📅 `{now}` | Expiry `{exp_str}` ({days_left}d)
 ━━━━━━━━━━━━━━━━━━━
 📍 *KEY LEVELS*
@@ -417,17 +317,165 @@ call_wall  = {pine_call}
 put_wall   = {pine_put}
 ```
 """
+    return msg
 
-    # ── ส่ง Report ────────────────────────────────────
+
+# ══════════════════════════════════════════════════════
+#  TELEGRAM — ส่งข้อความ
+# ══════════════════════════════════════════════════════
+
+def send_telegram(msg: str, chat_id=None):
+    if not TELEGRAM_TOKEN:
+        print(msg)
+        return False
+    target = chat_id or CHAT_ID
+    if not target:
+        print(msg)
+        return False
+    url  = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    resp = requests.post(url, json={
+        "chat_id"   : target,
+        "text"      : msg,
+        "parse_mode": "Markdown"
+    }, timeout=15)
+    ok = resp.status_code == 200
+    print("✅ Sent!" if ok else f"❌ {resp.text[:100]}")
+    return ok
+
+
+# ══════════════════════════════════════════════════════
+#  TELEGRAM BOT — Long Polling
+# ══════════════════════════════════════════════════════
+
+def get_updates(offset=0):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates"
+    try:
+        resp = requests.get(url, params={
+            "offset" : offset,
+            "timeout": 30
+        }, timeout=35)
+        return resp.json().get("result", [])
+    except Exception:
+        return []
+
+
+def handle_command(text: str, chat_id: str):
+    text = text.strip().lower()
+
+    if text in ["/gold", "/g"]:
+        send_telegram("⏳ กำลังดึงข้อมูล รอสักครู่...", chat_id)
+        msg = build_report(trigger="manual")
+        send_telegram(msg, chat_id)
+
+    elif text in ["/help", "/start"]:
+        help_msg = """
+🥇 *Gold Options Bot — คำสั่ง*
+━━━━━━━━━━━━━━━━━━━
+/gold  — ดึงข้อมูล Options ทันที
+/g     — เหมือน /gold (shortcut)
+/status — ดูสถานะ Bot + ตารางเวลา
+/help  — แสดงคำสั่งทั้งหมด
+━━━━━━━━━━━━━━━━━━━
+⏰ *ส่งอัตโนมัติ:* """ + ", ".join(AUTO_SCHEDULE) + " น."
+        send_telegram(help_msg, chat_id)
+
+    elif text == "/status":
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        status_msg = f"""
+✅ *Bot Online*
+🕐 เวลาปัจจุบัน: `{now}`
+⏰ ส่งอัตโนมัติ: {", ".join(AUTO_SCHEDULE)} น.
+📡 Session: {"✅ Active" if CRUMB else "⚠️ No crumb"}
+"""
+        send_telegram(status_msg, chat_id)
+
+    else:
+        send_telegram(
+            "❓ ไม่รู้จักคำสั่ง — ลอง /help เพื่อดูคำสั่งทั้งหมด",
+            chat_id
+        )
+
+
+def bot_polling_loop():
+    global last_update_id, bot_running
+    bot_running = True
+    print(f"🤖 Bot polling started — รับคำสั่ง /gold ได้แล้ว")
+
+    while bot_running:
+        updates = get_updates(offset=last_update_id)
+        for update in updates:
+            last_update_id = update["update_id"] + 1
+            msg = update.get("message", {})
+            text    = msg.get("text", "")
+            chat_id = str(msg.get("chat", {}).get("id", ""))
+            if text.startswith("/"):
+                print(f"📩 [{chat_id}] {text}")
+                threading.Thread(
+                    target=handle_command,
+                    args=(text, chat_id),
+                    daemon=True
+                ).start()
+
+        time.sleep(1)
+
+
+# ══════════════════════════════════════════════════════
+#  SCHEDULER — ส่งอัตโนมัติ
+# ══════════════════════════════════════════════════════
+
+def scheduled_job():
+    print(f"\n⏰ Scheduled run — {datetime.now().strftime('%H:%M')}")
+    msg = build_report(trigger="auto")
     send_telegram(msg)
-    print("✅ Done!")
 
-    # ── Bot Polling (รันเฉพาะนอก GitHub Actions) ──────
-    # GitHub Actions จะรัน main() แล้วจบ
-    # Bot polling จะรันเฉพาะตอนเปิดบนเครื่องตัวเอง
-    if not os.environ.get("GITHUB_ACTIONS"):
-        bot_polling()
+
+def setup_schedule():
+    for t in AUTO_SCHEDULE:
+        schedule.every().day.at(t).do(scheduled_job)
+        print(f"✅ Scheduled: {t} น.")
+
+
+def schedule_loop():
+    while True:
+        schedule.run_pending()
+        time.sleep(30)
+
+
+# ══════════════════════════════════════════════════════
+#  MAIN
+# ══════════════════════════════════════════════════════
+
+def main():
+    print("=" * 50)
+    print("🥇 Gold Options Tracker v5")
+    print("=" * 50)
+
+    if not TELEGRAM_TOKEN:
+        print("⚠️  TELEGRAM_TOKEN ไม่ได้ตั้งค่า — จะ print แทน")
+    if not CHAT_ID:
+        print("⚠️  CHAT_ID ไม่ได้ตั้งค่า")
+
+    # ── 1. ส่งรายงานแรกทันทีตอนเริ่ม ─────────────────
+    print("\n📡 กำลังส่งรายงานแรก...")
+    msg = build_report(trigger="startup")
+    send_telegram(msg)
+
+    # ── 2. ตั้ง Schedule อัตโนมัติ ────────────────────
+    print("\n⏰ ตั้งเวลาอัตโนมัติ...")
+    setup_schedule()
+
+    # ── 3. เริ่ม Scheduler Thread ──────────────────────
+    sched_thread = threading.Thread(target=schedule_loop, daemon=True)
+    sched_thread.start()
+    print("✅ Scheduler เริ่มทำงาน")
+
+    # ── 4. เริ่ม Telegram Bot Polling ─────────────────
+    print("\n🤖 เริ่ม Telegram Bot...")
+    bot_polling_loop()   # blocking — รันตลอดเวลา
 
 
 if __name__ == "__main__":
     main()
+
+
+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
