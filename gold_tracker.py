@@ -483,7 +483,7 @@ def main():
     # คำนวณ threshold จาก OI จริง
     all_oi = [v["oi"] for v in {**calls, **puts}.values()]
     median_oi = sorted(all_oi)[len(all_oi)//2] if all_oi else 0
-    min_oi_threshold = max(100, int(median_oi * 0.3))
+    min_oi_threshold = max(100, int(median_oi * 0.2))
     print(f"🔍 min_oi threshold: {min_oi_threshold}")
     
     # filter ใหม่
@@ -502,7 +502,7 @@ def main():
 
     # ── คำนวณ ─────────────────────────────────────────
     max_pain_raw                = calc_max_pain(calls, puts, current_price=use_price, pct=0.10)
-    call_wall_raw, put_wall_raw = find_walls(calls, puts, use_price, pct=0.08)
+    call_wall_raw, put_wall_raw = find_walls(calls, puts, use_price, pct=0.12)
     iv_atm                      = get_atm_iv(calls, puts, use_price)
 
     if gvz_iv:
