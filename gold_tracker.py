@@ -311,7 +311,7 @@ def main():
 
     # ── หา Expiry ─────────────────────────────────────
     print("📅 Fetching expiry list...")
-    expiry_list = get_expiry_list("GC=F")
+    expiry_list = get_expiry_list("GLD")
     if not expiry_list:
         send_telegram("❌ ดึง Expiry list ไม่ได้")
         return
@@ -322,7 +322,7 @@ def main():
 
     # ── Options Chain ─────────────────────────────────
     print("📊 Fetching options chain...")
-    calls_raw, puts_raw = get_options_chain("GC=F", best_ts)
+    calls_raw, puts_raw = get_options_chain("GLD", best_ts)
     if not calls_raw or not puts_raw:
         send_telegram("❌ ดึง Options Chain ไม่ได้")
         return
@@ -333,20 +333,20 @@ def main():
 
     # ── คำนวณ ─────────────────────────────────────────
     max_pain  = calc_max_pain(calls, puts)
-    call_wall, put_wall = find_walls(calls, puts, gold_price)
+    call_wall_raw, put_wall_raw = find_walls(calls, puts, gold_price / 10)
     iv_atm    = get_atm_iv(calls, puts, gold_price)
 
     if gvz_iv:
         iv_atm = gvz_iv
 
     iv_pct    = f"{iv_atm * 100:.1f}%" if iv_atm else "N/A"
-    max_pain  = round(max_pain)  if max_pain  else None
-    call_wall = round(call_wall)
-    put_wall  = round(put_wall)
+    max_pain  = round(max_pain_raw  * 10) if max_pain_raw  else None
+    call_wall = round(call_wall_raw * 10)
+    put_wall  = round(put_wall_raw  * 10)
 
     u1, l1, u2, l2 = calc_range(gold_price, iv_atm, days_left)
 
-    chart = make_chart(calls, puts, gold_price, max_pain, mult=1.0, n=10)
+    chart = make_chart(calls, puts, gold_price / 10, max_pain_raw, mult=10.0, n=10)
 
     pain_str  = f"`{max_pain}`" if max_pain else "N/A"
     r1 = f"`{l1}` — `{u1}`" if u1 else "N/A"
