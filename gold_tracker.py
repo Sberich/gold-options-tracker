@@ -162,12 +162,7 @@ def parse_chain(options_list):
         strike = float(opt.get("strike", 0))
         oi     = int(opt.get("openInterest", 0) or 0)
         iv     = float(opt.get("impliedVolatility", 0) or 0)
-        result[strike] = {"oi": oi, "iv": iv}
-    return result
-
-# ใช้ OI ถ้ามี ถ้าไม่มีใช้ volume แทน
         oi = oi if oi > 0 else vol
-
         result[strike] = {"oi": oi, "iv": iv}
     return result
 
