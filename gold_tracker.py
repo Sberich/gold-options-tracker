@@ -379,6 +379,11 @@ def main():
     call_wall = round(call_wall_raw * 10)
     put_wall  = round(put_wall_raw  * 10)
 
+    # 👇 เพิ่มตรงนี้
+    print(f"🔍 max_pain: {max_pain}")
+    print(f"🔍 call_wall: {call_wall}")
+    print(f"🔍 put_wall: {put_wall}")
+    
     u1, l1, u2, l2 = calc_range(gold_price, iv_atm, days_left)
 
     chart = make_chart(calls, puts, gld_price, max_pain_raw, mult=10.0, n=10)
