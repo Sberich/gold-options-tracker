@@ -332,15 +332,15 @@ def main():
     print(f"📊 Calls: {len(calls)}, Puts: {len(puts)}")
 
     # ── คำนวณ ─────────────────────────────────────────
-    max_pain  = calc_max_pain(calls, puts)
+    max_pain_raw            = calc_max_pain(calls, puts)
     call_wall_raw, put_wall_raw = find_walls(calls, puts, gold_price / 10)
-    iv_atm    = get_atm_iv(calls, puts, gold_price)
+    iv_atm                  = get_atm_iv(calls, puts, gold_price / 10)
 
     if gvz_iv:
         iv_atm = gvz_iv
 
     iv_pct    = f"{iv_atm * 100:.1f}%" if iv_atm else "N/A"
-    max_pain  = round(max_pain_raw  * 10) if max_pain_raw  else None
+    max_pain  = round(max_pain_raw  * 10) if max_pain_raw else None
     call_wall = round(call_wall_raw * 10)
     put_wall  = round(put_wall_raw  * 10)
 
