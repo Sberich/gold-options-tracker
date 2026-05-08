@@ -332,9 +332,9 @@ def main():
     print(f"📊 Calls: {len(calls)}, Puts: {len(puts)}")
 
     # ── คำนวณ ─────────────────────────────────────────
-    max_pain_raw            = calc_max_pain(calls, puts)
-    call_wall_raw, put_wall_raw = find_walls(calls, puts, gold_price / 10)
-    iv_atm                  = get_atm_iv(calls, puts, gold_price / 10)
+    max_pain_raw                = calc_max_pain(calls, puts)
+    call_wall_raw, put_wall_raw = find_walls(calls, puts, gld_price)
+    iv_atm                      = get_atm_iv(calls, puts, gld_price)
 
     if gvz_iv:
         iv_atm = gvz_iv
@@ -346,7 +346,7 @@ def main():
 
     u1, l1, u2, l2 = calc_range(gold_price, iv_atm, days_left)
 
-    chart = make_chart(calls, puts, gold_price / 10, max_pain_raw, mult=10.0, n=10)
+    chart = make_chart(calls, puts, gld_price, max_pain_raw, mult=10.0, n=10)
 
     pain_str  = f"`{max_pain}`" if max_pain else "N/A"
     r1 = f"`{l1}` — `{u1}`" if u1 else "N/A"
