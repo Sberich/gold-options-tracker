@@ -1,19 +1,15 @@
-
 name: Gold Options Daily Tracker
-
 on:
-  # รันอัตโนมัติทุกวัน 00:00 UTC = 07:00 Thailand
   schedule:
-    - cron: '0 0 * * 1-5'   # จันทร์-ศุกร์ เท่านั้น (ตลาดเปิด)
-
-  # รันได้ด้วยตนเองจาก GitHub UI
+    - cron: '0 1 * * 1-5'    # 08:00 Thailand
+    - cron: '0 6 * * 1-5'    # 13:00 Thailand
+    - cron: '0 13 * * 1-5'   # 20:00 Thailand
   workflow_dispatch:
 
 jobs:
   fetch-and-notify:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
