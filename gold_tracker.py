@@ -165,6 +165,12 @@ def parse_chain(options_list):
         result[strike] = {"oi": oi, "iv": iv}
     return result
 
+# ใช้ OI ถ้ามี ถ้าไม่มีใช้ volume แทน
+        oi = oi if oi > 0 else vol
+
+        result[strike] = {"oi": oi, "iv": iv}
+    return result
+
 
 # ── 6. คำนวณ Max Pain ────────────────────────────────
 def calc_max_pain(calls_dict, puts_dict):
