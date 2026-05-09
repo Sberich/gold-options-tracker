@@ -233,7 +233,7 @@ def find_walls(calls_dict, puts_dict, current_price, pct=0.15):
 #  7b. หา Call Wall / Put Wall (Smart Bucket version)
 # ══════════════════════════════════════════════════════
 def find_walls_smart(calls_dict, puts_dict, gld_price, gold_price, mult):
-    ROUND = 100  # GC กระจุก OI ที่ round 100
+    ROUND = 50  # GC กระจุก OI ที่ round 100
 
     buckets_call = {}
     for strike, v in calls_dict.items():
@@ -538,8 +538,8 @@ def main():
     )
     iv_atm                      = get_atm_iv(calls, puts, use_price)
 
-    if gvz_iv:
-        iv_atm = gvz_iv
+    if not iv_atm and gvz_iv:
+        iv_atm = gvz_iv   # ใช้ GVZ เฉพาะตอน ATM IV หาไม่ได้
 
     iv_pct    = f"{iv_atm * 100:.1f}%" if iv_atm else "N/A"
     max_pain  = round(max_pain_raw  * mult_final) if max_pain_raw else None
