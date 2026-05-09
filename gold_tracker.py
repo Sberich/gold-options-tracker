@@ -229,7 +229,35 @@ def find_walls(calls_dict, puts_dict, current_price, pct=0.15):
                   if puts_below else current_price * 0.95
 
     return float(call_wall), float(put_wall)
+# ══════════════════════════════════════════════════════
+#  7b. หา Call Wall / Put Wall (Smart Bucket version)
+# ══════════════════════════════════════════════════════
+def find_walls_smart(calls_dict, puts_dict, gld_price, gold_price, mult):
+    ROUND = 100  # GC กระจุก OI ที่ round 100
 
+    buckets_call = {}
+    for strike, v in calls_dict.items():
+        gold_strike = strike * mult
+        bucket = round(gold_strike / ROUND) * ROUND
+        buckets_call[bucket] = buckets_call.get(bucket, 0) + v["oi"]
+
+    buckets_put = {}
+    for strike, v in puts_dict.items():
+        gold_strike = strike * mult
+        bucket = round(gold_strike / ROUND) * ROUND
+        buckets_put[bucket] = buckets_put.get(bucket, 0) + v["oi"]
+
+    calls_above = {b: oi for b, oi in buckets_call.items()
+                   if b > gold_price}
+    puts_below  = {b: oi for b, oi in buckets_put.items()
+                   if b < gold_price}
+
+    call_wall = max(calls_above, key=calls_above.get) \
+                if calls_above else gold_price * 1.05
+    put_wall  = max(puts_below,  key=puts_below.get)  \
+                if puts_below  else gold_price * 0.95
+
+    return call_wall, put_wall
 
 # ══════════════════════════════════════════════════════
 #  8. หา ATM IV
@@ -502,7 +530,12 @@ def main():
 
     # ── คำนวณ ─────────────────────────────────────────
     max_pain_raw                = calc_max_pain(calls, puts, current_price=use_price, pct=0.10)
-    call_wall_raw, put_wall_raw = find_walls(calls, puts, use_price, pct=0.12)
+    call_wall_raw, put_wall_raw = find_walls_smart(
+        calls, puts,
+        gld_price  = use_price,
+        gold_price = gold_price,
+        mult       = mult_final
+    )
     iv_atm                      = get_atm_iv(calls, puts, use_price)
 
     if gvz_iv:
@@ -510,8 +543,9 @@ def main():
 
     iv_pct    = f"{iv_atm * 100:.1f}%" if iv_atm else "N/A"
     max_pain  = round(max_pain_raw  * mult_final) if max_pain_raw else None
-    call_wall = round(call_wall_raw * mult_final)
-    put_wall  = round(put_wall_raw  * mult_final)
+    # ใหม่
+    call_wall = round(call_wall_raw)
+    put_wall  = round(put_wall_raw)
 
     print(f"🔍 max_pain={max_pain} | call_wall={call_wall} | put_wall={put_wall}")
 
