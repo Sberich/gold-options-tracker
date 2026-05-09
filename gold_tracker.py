@@ -233,18 +233,19 @@ def find_walls(calls_dict, puts_dict, current_price, pct=0.15):
 #  7b. หา Call Wall / Put Wall (Smart Bucket version)
 # ══════════════════════════════════════════════════════
 def find_walls_smart(calls_dict, puts_dict, gld_price, gold_price, mult):
-    ROUND = 50  # GC กระจุก OI ที่ round 100
+    ROUND_CALL = 100   # Call กระจุก round 100
+    ROUND_PUT  = 50    # Put ละเอียดกว่า
 
     buckets_call = {}
     for strike, v in calls_dict.items():
         gold_strike = strike * mult
-        bucket = round(gold_strike / ROUND) * ROUND
+        bucket = round(gold_strike / ROUND_CALL) * ROUND_CALL
         buckets_call[bucket] = buckets_call.get(bucket, 0) + v["oi"]
 
     buckets_put = {}
     for strike, v in puts_dict.items():
         gold_strike = strike * mult
-        bucket = round(gold_strike / ROUND) * ROUND
+        bucket = round(gold_strike / ROUND_PUT) * ROUND_PUT
         buckets_put[bucket] = buckets_put.get(bucket, 0) + v["oi"]
 
     calls_above = {b: oi for b, oi in buckets_call.items()
@@ -538,8 +539,10 @@ def main():
     )
     iv_atm                      = get_atm_iv(calls, puts, use_price)
 
-    if not iv_atm and gvz_iv:
-        iv_atm = gvz_iv   # ใช้ GVZ เฉพาะตอน ATM IV หาไม่ได้
+    if iv_atm and gvz_iv:
+        iv_atm = (iv_atm + gvz_iv) / 2   # เฉลี่ยสองค่า → ~23-24%
+    elif gvz_iv:
+        iv_atm = gvz_iv
 
     iv_pct    = f"{iv_atm * 100:.1f}%" if iv_atm else "N/A"
     max_pain  = round(max_pain_raw  * mult_final) if max_pain_raw else None
