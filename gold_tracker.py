@@ -1,19 +1,60 @@
 """
-CME Gold Options Tracker & Discord Notifier
-ดึงข้อมูล Options ตรงจาก CME Group (QuikStrike) + ส่ง Discord Webhook
+CME Multi-Asset Options & Vol2Vol Tracker
+รองรับ: Gold (GC), Silver (SI), Crude Oil (CL), S&P 500 (ES), Nasdaq (NQ)
 """
 
 import os
 import re
+import sys
 import math
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 
-# ── Config ───────────────────────────────────────────
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 
-CME_URL = "https://cmegroup-tools.quikstrike.net/User/QuikStrikeView.aspx?pid=40&pf=6&viewitemid=IntegratedVOIHeatMap"
+ASSETS = {
+    "gold": {
+        "name": "Gold (COMEX GC)",
+        "icon": "🥇",
+        "pid": 40,
+        "color": 16766720,  # Gold
+        "iv_fallback": 0.214,
+        "gvz_symbol": "^GVZ"
+    },
+    "silver": {
+        "name": "Silver (COMEX SI)",
+        "icon": "🥈",
+        "pid": 41,
+        "color": 12632256,  # Silver / Grey
+        "iv_fallback": 0.300,
+        "gvz_symbol": "^VXSLV"
+    },
+    "oil": {
+        "name": "Crude Oil WTI (NYMEX CL)",
+        "icon": "🛢️",
+        "pid": 30,
+        "color": 3447003,   # Dark Blue
+        "iv_fallback": 0.350,
+        "gvz_symbol": "^OVX"
+    },
+    "sp500": {
+        "name": "E-mini S&P 500 (CME ES)",
+        "icon": "📈",
+        "pid": 103,
+        "color": 3066993,   # Green
+        "iv_fallback": 0.160,
+        "gvz_symbol": "^VIX"
+    },
+    "nasdaq": {
+        "name": "E-mini Nasdaq 100 (CME NQ)",
+        "icon": "💻",
+        "pid": 121,
+        "color": 10181046,  # Purple
+        "iv_fallback": 0.200,
+        "gvz_symbol": "^VXN"
+    }
+}
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -21,32 +62,28 @@ HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
 
-def fetch_cme_options():
-    print("📡 Fetching Gold Options from CME QuikStrike...")
+def fetch_cme_data(pid):
+    url = f"https://cmegroup-tools.quikstrike.net/User/QuikStrikeView.aspx?pid={pid}&viewitemid=IntegratedVOIHeatMap"
     session = requests.Session()
     session.headers.update(HEADERS)
     
-    resp = session.get(CME_URL, timeout=20)
+    resp = session.get(url, timeout=20)
     if resp.status_code != 200:
-        print(f"❌ Failed to fetch CME: {resp.status_code}")
         return None
     
     soup = BeautifulSoup(resp.text, "html.parser")
     tables = soup.find_all("table")
     if len(tables) < 7:
-        print("❌ Cannot find options table in page")
         return None
     
-    # Table 6 คือ Heatmap Table
     t = tables[6]
     rows = t.find_all("tr")
     if len(rows) < 4:
-        print("❌ Table rows incomplete")
         return None
 
-    # ราคาทอง Futures
-    price_match = re.search(r"(\d{4}\.\d+)", rows[0].text)
-    gold_price = float(price_match.group(1)) if price_match else 0.0
+    # ดึงราคา Futures
+    price_match = re.search(r"(\d+\.?\d*)", rows[0].text)
+    price = float(price_match.group(1)) if price_match else 0.0
 
     calls_by_strike = {}
     puts_by_strike = {}
@@ -78,32 +115,33 @@ def fetch_cme_options():
         calls_by_strike[strike] = total_calls
         puts_by_strike[strike] = total_puts
 
-    return gold_price, calls_by_strike, puts_by_strike
+    return price, calls_by_strike, puts_by_strike
 
 
-def get_gvz_iv():
+def get_volatility(symbol, fallback):
     try:
-        url = "https://query1.finance.yahoo.com/v8/finance/chart/%5EGVZ"
-        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        price = resp.json()["chart"]["result"][0]["meta"]["regularMarketPrice"]
-        return float(price) / 100
-    except Exception:
-        return 0.20  # default 20%
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
+        p = resp.json()["chart"]["result"][0]["meta"]["regularMarketPrice"]
+        return float(p) / 100
+    except:
+        return fallback
 
 
-def calc_expected_range(price, iv, days=30):
-    if not iv or price <= 0:
-        return "N/A", "N/A"
-    m1 = price * iv * math.sqrt(days / 365)
-    m2 = m1 * 2
-    r1 = f"`{round(price - m1, 1)}` — `{round(price + m1, 1)}`"
-    r2 = f"`{round(price - m2, 1)}` — `{round(price + m2, 1)}`"
-    return r1, r2
+def calc_ranges(price, iv):
+    m_1d = price * iv * math.sqrt(1 / 365)
+    m_5d = price * iv * math.sqrt(5 / 365)
+    m_30d = price * iv * math.sqrt(30 / 365)
+    return (
+        (round(price - m_1d, 1), round(price + m_1d, 1), round(m_1d, 1)),
+        (round(price - m_5d, 1), round(price + m_5d, 1), round(m_5d, 1)),
+        (round(price - m_30d, 1), round(price + m_30d, 1), round(m_30d, 1))
+    )
 
 
-def calc_max_pain(calls, puts, gold_price):
+def calc_max_pain(calls, puts, price):
     strikes = sorted(set(calls.keys()) | set(puts.keys()))
-    strikes = [s for s in strikes if gold_price * 0.85 <= s <= gold_price * 1.15]
+    strikes = [s for s in strikes if price * 0.85 <= s <= price * 1.15]
     if not strikes:
         return None
 
@@ -120,38 +158,32 @@ def calc_max_pain(calls, puts, gold_price):
     return min(pain, key=pain.get)
 
 
-def find_walls(calls, puts, gold_price):
-    calls_above = {s: oi for s, oi in calls.items() if s >= gold_price}
-    call_wall = max(calls_above, key=calls_above.get) if calls_above else gold_price * 1.05
+def find_walls(calls, puts, price):
+    calls_above = {s: oi for s, oi in calls.items() if s >= price}
+    call_wall = max(calls_above, key=calls_above.get) if calls_above else price * 1.05
 
-    puts_below = {s: oi for s, oi in puts.items() if s <= gold_price}
-    put_wall = max(puts_below, key=puts_below.get) if puts_below else gold_price * 0.95
+    puts_below = {s: oi for s, oi in puts.items() if s <= price}
+    put_wall = max(puts_below, key=puts_below.get) if puts_below else price * 0.95
 
-    return int(call_wall), int(put_wall)
+    return round(call_wall, 1), round(put_wall, 1)
 
 
-def make_ascii_chart(calls, puts, gold_price, max_pain, call_wall, put_wall, n=12):
+def make_ascii_chart(calls, puts, price, max_pain, call_wall, put_wall, n=10):
     strikes = sorted(set(calls.keys()) | set(puts.keys()))
     if not strikes:
         return ""
-    
-    atm_idx = min(range(len(strikes)), key=lambda i: abs(strikes[i] - gold_price))
+    atm_idx = min(range(len(strikes)), key=lambda i: abs(strikes[i] - price))
     start = max(0, atm_idx - n // 2)
     subset = strikes[start: start + n]
-    
     max_oi = max((max(calls.get(s, 0), puts.get(s, 0)) for s in subset), default=1) or 1
     
-    lines = ["```", f"{'STRIKE':>7} | {'CALL OI':^10} | {'PUT OI':^10}"]
+    lines = ["```", f"{'STRIKE':>8} | {'CALL OI':^9} | {'PUT OI':^9}"]
     lines.append("-" * 34)
-    
     for s in subset:
-        c_oi = calls.get(s, 0)
-        p_oi = puts.get(s, 0)
-        c_bar = "█" * int(c_oi / max_oi * 8)
-        p_bar = "█" * int(p_oi / max_oi * 8)
-        
+        c_bar = "█" * int(calls.get(s, 0) / max_oi * 7)
+        p_bar = "█" * int(puts.get(s, 0) / max_oi * 7)
         tag = ""
-        if abs(s - gold_price) == min(abs(x - gold_price) for x in subset):
+        if abs(s - price) == min(abs(x - price) for x in subset):
             tag = " ←NOW"
         elif max_pain and s == max_pain:
             tag = " ←PAIN"
@@ -159,89 +191,81 @@ def make_ascii_chart(calls, puts, gold_price, max_pain, call_wall, put_wall, n=1
             tag = " ←CALL"
         elif s == put_wall:
             tag = " ←PUT"
-            
-        lines.append(f"{int(s):>7} | {c_bar:<10} | {p_bar:<10}{tag}")
+        lines.append(f"{s:>8} | {c_bar:<9} | {p_bar:<9}{tag}")
     lines.append("```")
     return "\n".join(lines)
 
 
-def send_discord(gold_price, max_pain, call_wall, put_wall, iv_pct, r1, r2, chart_text):
-    if not DISCORD_WEBHOOK_URL:
-        print("⚠️ DISCORD_WEBHOOK_URL is not set")
-        return False
+def process_asset(key):
+    cfg = ASSETS.get(key)
+    if not cfg:
+        return None
+
+    data = fetch_cme_data(cfg["pid"])
+    if not data:
+        return None
+    price, calls, puts = data
+
+    iv = get_volatility(cfg["gvz_symbol"], cfg["iv_fallback"])
+    iv_pct = f"{iv * 100:.1f}%"
+    r_1d, r_5d, r_30d = calc_ranges(price, iv)
+    max_pain = calc_max_pain(calls, puts, price)
+    call_wall, put_wall = find_walls(calls, puts, price)
+    chart = make_ascii_chart(calls, puts, price, max_pain, call_wall, put_wall)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    
-    payload = {
-        "username": "CME Gold Tracker",
-        "avatar_url": "https://cdn-icons-png.flaticon.com/512/2583/2583890.png",
-        "embeds": [
+    embed = {
+        "title": f"{cfg['icon']} {cfg['name']} — Options & Vol2Vol",
+        "description": f"อัปเดตข้อมูลตรงจาก **CME QuikStrike** | เวลา: `{now}`",
+        "color": cfg["color"],
+        "fields": [
             {
-                "title": "🥇 CME COMEX Gold Options Analysis",
-                "description": f"ข้อมูลจริงจาก **CME QuikStrike Heatmap**\nเวลาอัปเดต: `{now}`",
-                "color": 16766720,  # Gold Color
-                "fields": [
-                    {
-                        "name": "📍 KEY LEVELS (COMEX GC)",
-                        "value": f"💰 **Futures Price:** `{gold_price}`\n"
-                                 f"⚖️ **Max Pain:** `{max_pain}`\n"
-                                 f"🟢 **Call Wall (แนวต้าน):** `{call_wall}`\n"
-                                 f"🔴 **Put Wall (แนวรับ):** `{put_wall}`\n"
-                                 f"📈 **GVZ Volatility:** `{iv_pct}`",
-                        "inline": False
-                    },
-                    {
-                        "name": "📐 EXPECTED RANGE (30 Days)",
-                        "value": f"1️⃣ **1SD (68%):** {r1}\n"
-                                 f"2️⃣ **2SD (95%):** {r2}",
-                        "inline": False
-                    },
-                    {
-                        "name": "📊 OPEN INTEREST MATRIX",
-                        "value": chart_text,
-                        "inline": False
-                    },
-                    {
-                        "name": "📋 Pine Script (TradingView)",
-                        "value": f"```pinescript\nfair_value = {max_pain}\ncall_wall  = {call_wall}\nput_wall   = {put_wall}\n```",
-                        "inline": False
-                    }
-                ],
-                "footer": {
-                    "text": "Data Source: CME Group QuikStrike • Real COMEX Data"
-                }
+                "name": "📍 KEY LEVELS",
+                "value": f"💰 **Price:** `{price}`\n"
+                         f"⚖️ **Max Pain:** `{max_pain}`\n"
+                         f"🟢 **Call Wall:** `{call_wall}`\n"
+                         f"🔴 **Put Wall:** `{put_wall}`\n"
+                         f"📈 **Volatility:** `{iv_pct}` (เหวี่ยง ±{r_1d[2]}$/วัน)",
+                "inline": False
+            },
+            {
+                "name": "📐 EXPECTED RANGES (Vol2Vol)",
+                "value": f"☀️ **1-Day:** `{r_1d[0]}` — `{r_1d[1]}`\n"
+                         f"📅 **5-Day:** `{r_5d[0]}` — `{r_5d[1]}`\n"
+                         f"🗓️ **30-Day:** `{r_30d[0]}` — `{r_30d[1]}`",
+                "inline": False
+            },
+            {
+                "name": "📊 OPEN INTEREST MATRIX",
+                "value": chart,
+                "inline": False
             }
-        ]
+        ],
+        "footer": {
+            "text": "Data Source: CME Group QuikStrike • Real Exchange Data"
+        }
     }
-
-    resp = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=15)
-    if resp.status_code in [200, 204]:
-        print("✅ Discord notification sent successfully!")
-        return True
-    else:
-        print(f"❌ Failed to send Discord: {resp.status_code} {resp.text}")
-        return False
+    return embed
 
 
 def main():
-    data = fetch_cme_options()
-    if not data:
-        print("❌ Could not get data from CME")
-        return
+    target = sys.argv[1].lower() if len(sys.argv) > 1 else os.environ.get("TARGET_ASSET", "gold").lower()
+    
+    embeds = []
+    if target == "all":
+        for k in ASSETS.keys():
+            e = process_asset(k)
+            if e:
+                embeds.append(e)
+    else:
+        e = process_asset(target)
+        if e:
+            embeds.append(e)
 
-    gold_price, calls, puts = data
-    print(f"💰 Gold Futures Price: {gold_price}")
-
-    gvz_iv = get_gvz_iv()
-    iv_pct = f"{gvz_iv * 100:.1f}%"
-    r1, r2 = calc_expected_range(gold_price, gvz_iv, days=30)
-
-    max_pain = calc_max_pain(calls, puts, gold_price)
-    call_wall, put_wall = find_walls(calls, puts, gold_price)
-    chart = make_ascii_chart(calls, puts, gold_price, max_pain, call_wall, put_wall)
-
-    send_discord(gold_price, max_pain, call_wall, put_wall, iv_pct, r1, r2, chart)
-    print("🎯 Execution Completed!")
+    if embeds and DISCORD_WEBHOOK_URL:
+        # Discord อนุญาตส่งได้สูงสุด 10 embeds ต่อ 1 request
+        requests.post(DISCORD_WEBHOOK_URL, json={"embeds": embeds[:10]}, timeout=15)
+        print("✅ Sent to Discord successfully!")
 
 if __name__ == "__main__":
     main()
