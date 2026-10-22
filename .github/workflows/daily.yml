@@ -252,6 +252,12 @@ def process_asset(key):
                 "name": "📊 OPEN INTEREST MATRIX",
                 "value": chart,
                 "inline": False
+            },
+            # ⬇️ วางกล่อง Pine Script ตรงนี้เลยครับ (ต่อท้าย OPEN INTEREST MATRIX) ⬇️
+            {
+                "name": "📋 Pine Script (TradingView)",
+                "value": f"```pinescript\nfair_value = {max_pain}\ncall_wall  = {call_wall}\nput_wall   = {put_wall}\ndaily_high = {r_1d[1]}\ndaily_low  = {r_1d[0]}\n```",
+                "inline": False
             }
         ],
         "footer": {
