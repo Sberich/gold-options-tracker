@@ -1,9 +1,9 @@
 name: Gold Options Daily Tracker
 on:
   schedule:
-    - cron: '0 1 * * 1-5'    # 08:00 Thailand
-    - cron: '0 6 * * 1-5'    # 13:00 Thailand
-    - cron: '0 13 * * 1-5'   # 20:00 Thailand
+    - cron: '0 1 * * 1-5'    # 08:00 น. ไทย
+    - cron: '0 6 * * 1-5'    # 13:00 น. ไทย
+    - cron: '0 13 * * 1-5'   # 20:00 น. ไทย
   workflow_dispatch:
 
 jobs:
@@ -23,8 +23,7 @@ jobs:
       - name: 📦 Install dependencies
         run: pip install -r requirements.txt
 
-      - name: 🥇 Run Gold Options Tracker
+      - name: 🥇 Run CME Gold Options Tracker
         env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          CHAT_ID: ${{ secrets.CHAT_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python gold_tracker.py
