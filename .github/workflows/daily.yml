@@ -1,5 +1,5 @@
 """
-CME Multi-Asset Options & Vol2Vol Tracker (Fixed Price Parser)
+CME Multi-Asset Options & Vol2Vol Tracker (With Pine Script & Fixed Price)
 รองรับ: Gold (GC), Silver (SI), Crude Oil (CL), S&P 500 (ES), Nasdaq (NQ)
 """
 
@@ -81,7 +81,7 @@ def fetch_cme_data(pid):
     if len(rows) < 4:
         return None
 
-    # [FIX] ดึงราคาจาก inner span ป้องกันเลขปีสัญญากวนราคา (เช่น GCZ6 ไม่เอาเลข 6 มาปน)
+    # ดึงราคาแม่นยำจาก inner span โดยตรง (ไม่ติดเลข 6 จากท้ายสัญญา)
     price = 0.0
     for sp in rows[0].find_all("span"):
         inner = sp.find("span")
@@ -94,7 +94,6 @@ def fetch_cme_data(pid):
                 pass
 
     if price == 0.0:
-        # Fallback
         m = re.findall(r"(\d{4}\.\d+|\d{2,3}\.\d+)", rows[0].text)
         price = float(m[0]) if m else 0.0
 
@@ -253,7 +252,6 @@ def process_asset(key):
                 "value": chart,
                 "inline": False
             },
-            # ⬇️ วางกล่อง Pine Script ตรงนี้เลยครับ (ต่อท้าย OPEN INTEREST MATRIX) ⬇️
             {
                 "name": "📋 Pine Script (TradingView)",
                 "value": f"```pinescript\nfair_value = {max_pain}\ncall_wall  = {call_wall}\nput_wall   = {put_wall}\ndaily_high = {r_1d[1]}\ndaily_low  = {r_1d[0]}\n```",
