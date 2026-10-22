@@ -334,24 +334,64 @@ def make_chart(calls_dict, puts_dict, current_price, max_pain,
 # ══════════════════════════════════════════════════════
 #  11. ส่ง Telegram
 # ══════════════════════════════════════════════════════
-def send_telegram(msg: str, chat_id=None):
-    if not TELEGRAM_TOKEN:
-        print(msg)
-        return False
-    target = chat_id or CHAT_ID
-    if not target:
-        print(msg)
-        return False
-    url  = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    resp = requests.post(url, json={
-        "chat_id"   : target,
-        "text"      : msg,
-        "parse_mode": "Markdown"
-    }, timeout=15)
-    ok = resp.status_code == 200
-    print("✅ Telegram sent!" if ok else f"❌ {resp.text}")
-    return ok
+import os
+import requests
 
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
+
+def send_discord(gold_price, max_pain, call_wall, put_wall, iv_pct, r1, r2, chart_text, pine_code):
+    if not DISCORD_WEBHOOK_URL:
+        print("❌ DISCORD_WEBHOOK_URL is not set")
+        return False
+
+    payload = {
+        "username": "Gold Options Tracker",
+        "avatar_url": "https://cdn-icons-png.flaticon.com/512/2583/2583890.png",
+        "embeds": [
+            {
+                "title": "🥇 GOLD PRO — Options Matrix Update",
+                "color": 16766720,  # สีทอง (Gold HEX to Decimal)
+                "fields": [
+                    {
+                        "name": "📍 KEY LEVELS",
+                        "value": f"💰 **Gold Price:** `{gold_price}`\n"
+                                 f"⚖️ **Max Pain:** `{max_pain}`\n"
+                                 f"🟢 **Call Wall:** `{call_wall}`\n"
+                                 f"🔴 **Put Wall:** `{put_wall}`\n"
+                                 f"📈 **ATM IV:** `{iv_pct}`",
+                        "inline": False
+                    },
+                    {
+                        "name": "📐 EXPECTED RANGE",
+                        "value": f"1️⃣ **1SD (68%):** `{r1}`\n"
+                                 f"2️⃣ **2SD (95%):** `{r2}`",
+                        "inline": False
+                    },
+                    {
+                        "name": "📊 OPEN INTEREST MATRIX",
+                        "value": chart_text,  # กล่อง ``` Strike | CALL | PUT ```
+                        "inline": False
+                    },
+                    {
+                        "name": "📋 Pine Script Snippet",
+                        "value": f"```pinescript\n{pine_code}\n```",
+                        "inline": False
+                    }
+                ],
+                "footer": {
+                    "text": "Data via CME / Yahoo Finance • Automated Tracker"
+                }
+            }
+        ]
+    }
+
+    resp = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=15)
+    if resp.status_code in [200, 204]:
+        print("✅ Discord notification sent successfully!")
+        return True
+    else:
+        print(f"❌ Failed to send Discord: {resp.status_code} {resp.text}")
+        return False
 
 # ══════════════════════════════════════════════════════
 #  [NEW 1] Trigger GitHub Actions ผ่าน API
