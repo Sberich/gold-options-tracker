@@ -1,6 +1,5 @@
 """
-CME Multi-Asset Options & Vol2Vol Tracker
-รองรับ: Gold (GC), Silver (SI), Crude Oil (CL), S&P 500 (ES), Nasdaq (NQ)
+CME Multi-Asset Options & Vol2Vol Tracker (Fast Multi-threading + Fixed Price)
 """
 
 import os
@@ -10,6 +9,7 @@ import math
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 
@@ -18,15 +18,15 @@ ASSETS = {
         "name": "Gold (COMEX GC)",
         "icon": "🥇",
         "pid": 40,
-        "color": 16766720,  # Gold
-        "iv_fallback": 0.214,
+        "color": 16766720,
+        "iv_fallback": 0.231,
         "gvz_symbol": "^GVZ"
     },
     "silver": {
         "name": "Silver (COMEX SI)",
         "icon": "🥈",
         "pid": 41,
-        "color": 12632256,  # Silver / Grey
+        "color": 12632256,
         "iv_fallback": 0.300,
         "gvz_symbol": "^VXSLV"
     },
@@ -34,7 +34,7 @@ ASSETS = {
         "name": "Crude Oil WTI (NYMEX CL)",
         "icon": "🛢️",
         "pid": 30,
-        "color": 3447003,   # Dark Blue
+        "color": 3447003,
         "iv_fallback": 0.350,
         "gvz_symbol": "^OVX"
     },
@@ -42,7 +42,7 @@ ASSETS = {
         "name": "E-mini S&P 500 (CME ES)",
         "icon": "📈",
         "pid": 103,
-        "color": 3066993,   # Green
+        "color": 3066993,
         "iv_fallback": 0.160,
         "gvz_symbol": "^VIX"
     },
@@ -50,7 +50,7 @@ ASSETS = {
         "name": "E-mini Nasdaq 100 (CME NQ)",
         "icon": "💻",
         "pid": 121,
-        "color": 10181046,  # Purple
+        "color": 10181046,
         "iv_fallback": 0.200,
         "gvz_symbol": "^VXN"
     }
@@ -67,7 +67,7 @@ def fetch_cme_data(pid):
     session = requests.Session()
     session.headers.update(HEADERS)
     
-    resp = session.get(url, timeout=20)
+    resp = session.get(url, timeout=15)
     if resp.status_code != 200:
         return None
     
@@ -81,9 +81,21 @@ def fetch_cme_data(pid):
     if len(rows) < 4:
         return None
 
-    # ดึงราคา Futures
-    price_match = re.search(r"(\d+\.?\d*)", rows[0].text)
-    price = float(price_match.group(1)) if price_match else 0.0
+    # ดึงราคาแม่นยำจาก inner span โดยตรง (ไม่ติดเลข 6)
+    price = 0.0
+    for sp in rows[0].find_all("span"):
+        inner = sp.find("span")
+        if inner and inner.text.strip():
+            clean_text = inner.text.strip().replace(",", "")
+            try:
+                price = float(clean_text)
+                break
+            except ValueError:
+                pass
+
+    if price == 0.0:
+        m = re.findall(r"(\d{4}\.\d+|\d{2,3}\.\d+)", rows[0].text)
+        price = float(m[0]) if m else 0.0
 
     calls_by_strike = {}
     puts_by_strike = {}
@@ -104,10 +116,8 @@ def fetch_cme_data(pid):
         while idx < len(cells):
             c_text = cells[idx].get_text(strip=True).replace(",", "")
             p_text = cells[idx+1].get_text(strip=True).replace(",", "") if idx+1 < len(cells) else "0"
-            
             c_val = int(c_text) if c_text.isdigit() else 0
             p_val = int(p_text) if p_text.isdigit() else 0
-            
             total_calls += c_val
             total_puts += p_val
             idx += 2
@@ -121,7 +131,7 @@ def fetch_cme_data(pid):
 def get_volatility(symbol, fallback):
     try:
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
         p = resp.json()["chart"]["result"][0]["meta"]["regularMarketPrice"]
         return float(p) / 100
     except:
@@ -239,6 +249,11 @@ def process_asset(key):
                 "name": "📊 OPEN INTEREST MATRIX",
                 "value": chart,
                 "inline": False
+            },
+            {
+                "name": "📋 Pine Script (TradingView)",
+                "value": f"```pinescript\nfair_value = {max_pain}\ncall_wall  = {call_wall}\nput_wall   = {put_wall}\ndaily_high = {r_1d[1]}\ndaily_low  = {r_1d[0]}\n```",
+                "inline": False
             }
         ],
         "footer": {
@@ -253,17 +268,16 @@ def main():
     
     embeds = []
     if target == "all":
-        for k in ASSETS.keys():
-            e = process_asset(k)
-            if e:
-                embeds.append(e)
+        # ดึงข้อมูล 5 สินทรัพย์พร้อมกันแบบ Parallel ใน 4 วินาที
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            results = list(executor.map(process_asset, ASSETS.keys()))
+        embeds = [e for e in results if e]
     else:
         e = process_asset(target)
         if e:
             embeds.append(e)
 
     if embeds and DISCORD_WEBHOOK_URL:
-        # Discord อนุญาตส่งได้สูงสุด 10 embeds ต่อ 1 request
         requests.post(DISCORD_WEBHOOK_URL, json={"embeds": embeds[:10]}, timeout=15)
         print("✅ Sent to Discord successfully!")
 
