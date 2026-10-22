@@ -1,11 +1,13 @@
 """
-CME Multi-Asset Options & Vol2Vol Tracker (Fast Multi-threading + Fixed Price)
+CME Multi-Asset Options & Vol2Vol Tracker (With Bitcoin + Fast Multi-threading)
+รองรับ: Gold, Silver, Oil, S&P 500, Nasdaq, Bitcoin
 """
 
 import os
 import re
 import sys
 import math
+import time
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
@@ -18,7 +20,7 @@ ASSETS = {
         "name": "Gold (COMEX GC)",
         "icon": "🥇",
         "pid": 40,
-        "color": 16766720,
+        "color": 16766720,  # Gold
         "iv_fallback": 0.231,
         "gvz_symbol": "^GVZ"
     },
@@ -26,7 +28,7 @@ ASSETS = {
         "name": "Silver (COMEX SI)",
         "icon": "🥈",
         "pid": 41,
-        "color": 12632256,
+        "color": 12632256,  # Silver
         "iv_fallback": 0.300,
         "gvz_symbol": "^VXSLV"
     },
@@ -34,7 +36,7 @@ ASSETS = {
         "name": "Crude Oil WTI (NYMEX CL)",
         "icon": "🛢️",
         "pid": 30,
-        "color": 3447003,
+        "color": 3447003,   # Blue
         "iv_fallback": 0.350,
         "gvz_symbol": "^OVX"
     },
@@ -42,7 +44,7 @@ ASSETS = {
         "name": "E-mini S&P 500 (CME ES)",
         "icon": "📈",
         "pid": 103,
-        "color": 3066993,
+        "color": 3066993,   # Green
         "iv_fallback": 0.160,
         "gvz_symbol": "^VIX"
     },
@@ -50,9 +52,17 @@ ASSETS = {
         "name": "E-mini Nasdaq 100 (CME NQ)",
         "icon": "💻",
         "pid": 121,
-        "color": 10181046,
+        "color": 10181046,  # Purple
         "iv_fallback": 0.200,
         "gvz_symbol": "^VXN"
+    },
+    "btc": {
+        "name": "Bitcoin Futures (CME BTC)",
+        "icon": "₿",
+        "pid": 360,
+        "color": 16098851,  # Bitcoin Orange
+        "iv_fallback": 0.520,
+        "gvz_symbol": "^VIX"
     }
 }
 
@@ -81,7 +91,7 @@ def fetch_cme_data(pid):
     if len(rows) < 4:
         return None
 
-    # ดึงราคาแม่นยำจาก inner span โดยตรง (ไม่ติดเลข 6)
+    # ดึงราคาแม่นยำจาก inner span โดยตรง (ไม่ติดเลขสัญญากวน)
     price = 0.0
     for sp in rows[0].find_all("span"):
         inner = sp.find("span")
@@ -94,7 +104,7 @@ def fetch_cme_data(pid):
                 pass
 
     if price == 0.0:
-        m = re.findall(r"(\d{4}\.\d+|\d{2,3}\.\d+)", rows[0].text)
+        m = re.findall(r"(\d+\.?\d*)", rows[0].text)
         price = float(m[0]) if m else 0.0
 
     calls_by_strike = {}
@@ -268,8 +278,7 @@ def main():
     
     embeds = []
     if target == "all":
-        # ดึงข้อมูล 5 สินทรัพย์พร้อมกันแบบ Parallel ใน 4 วินาที
-        with ThreadPoolExecutor(max_workers=5) as executor:
+        with ThreadPoolExecutor(max_workers=6) as executor:
             results = list(executor.map(process_asset, ASSETS.keys()))
         embeds = [e for e in results if e]
     else:
@@ -278,8 +287,7 @@ def main():
             embeds.append(e)
 
     if embeds and DISCORD_WEBHOOK_URL:
-        import time
-        # แยกส่งการ์ดทีละใบ เพื่อไม่ให้ติด Limit 6,000 ตัวอักษรของ Discord
+        # แยกส่งทีละใบ เพื่อไม่ให้เกิน Limit 6,000 ตัวอักษรของ Discord
         for e in embeds:
             requests.post(DISCORD_WEBHOOK_URL, json={"embeds": [e]}, timeout=15)
             time.sleep(0.5)
