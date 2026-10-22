@@ -278,7 +278,11 @@ def main():
             embeds.append(e)
 
     if embeds and DISCORD_WEBHOOK_URL:
-        requests.post(DISCORD_WEBHOOK_URL, json={"embeds": embeds[:10]}, timeout=15)
+        import time
+        # แยกส่งการ์ดทีละใบ เพื่อไม่ให้ติด Limit 6,000 ตัวอักษรของ Discord
+        for e in embeds:
+            requests.post(DISCORD_WEBHOOK_URL, json={"embeds": [e]}, timeout=15)
+            time.sleep(0.5)
         print("✅ Sent to Discord successfully!")
 
 if __name__ == "__main__":
