@@ -1,5 +1,5 @@
 """
-CME Multi-Asset Options & Vol2Vol Tracker (With Bitcoin + Fast Multi-threading)
+CME Multi-Asset Options & Vol2Vol Tracker (TradingView Axis + Spot Gold & Spread)
 รองรับ: Gold, Silver, Oil, S&P 500, Nasdaq, Bitcoin
 """
 
@@ -72,6 +72,22 @@ HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
 
+def get_spot_gold():
+    """ดึงราคาทอง Spot (XAU/USD) Real-time"""
+    try:
+        r = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=PAXGUSDT", timeout=3)
+        if r.status_code == 200:
+            return round(float(r.json()["price"]), 1)
+    except Exception:
+        pass
+    try:
+        r = requests.get("https://api.gold-api.com/price/XAU", timeout=3)
+        if r.status_code == 200:
+            return round(float(r.json()["price"]), 1)
+    except Exception:
+        pass
+    return None
+
 def fetch_cme_data(pid):
     url = f"https://cmegroup-tools.quikstrike.net/User/QuikStrikeView.aspx?pid={pid}&viewitemid=IntegratedVOIHeatMap"
     session = requests.Session()
@@ -91,7 +107,7 @@ def fetch_cme_data(pid):
     if len(rows) < 4:
         return None
 
-    # ดึงราคาแม่นยำจาก inner span โดยตรง (ไม่ติดเลขสัญญากวน)
+    # ดึงราคาแม่นยำจาก inner span
     price = 0.0
     for sp in rows[0].find_all("span"):
         inner = sp.find("span")
@@ -194,7 +210,10 @@ def make_ascii_chart(calls, puts, price, max_pain, call_wall, put_wall, n=10):
         return ""
     atm_idx = min(range(len(strikes)), key=lambda i: abs(strikes[i] - price))
     start = max(0, atm_idx - n // 2)
-    subset = strikes[start: start + n]
+    
+    # ── [จุดเปลี่ยนสำคัญ] เรียงจากมากสุด (บน) ลงไปหาน้อยสุด (ล่าง) ตรงกับแกน TradingView ──
+    subset = strikes[start: start + n][::-1]
+    
     max_oi = max((max(calls.get(s, 0), puts.get(s, 0)) for s in subset), default=1) or 1
     
     lines = ["```", f"{'STRIKE':>8} | {'CALL OI':^9} | {'PUT OI':^9}"]
@@ -233,6 +252,18 @@ def process_asset(key):
     call_wall, put_wall = find_walls(calls, puts, price)
     chart = make_ascii_chart(calls, puts, price, max_pain, call_wall, put_wall)
 
+    # จัดการแสดงราคา Spot + Spread เฉพาะสำหรับทองคำ
+    if key == "gold":
+        spot = get_spot_gold()
+        if spot:
+            spread = round(price - spot, 1)
+            spread_sign = f"+{spread}" if spread >= 0 else f"{spread}"
+            price_display = f"💰 **Futures (CME):** `{price}`\n🪙 **Spot (XAU):** `{spot}` *(Spread: `{spread_sign}$`)*"
+        else:
+            price_display = f"💰 **Futures Price:** `{price}`"
+    else:
+        price_display = f"💰 **Price:** `{price}`"
+
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     embed = {
         "title": f"{cfg['icon']} {cfg['name']} — Options & Vol2Vol",
@@ -241,7 +272,7 @@ def process_asset(key):
         "fields": [
             {
                 "name": "📍 KEY LEVELS",
-                "value": f"💰 **Price:** `{price}`\n"
+                "value": f"{price_display}\n"
                          f"⚖️ **Max Pain:** `{max_pain}`\n"
                          f"🟢 **Call Wall:** `{call_wall}`\n"
                          f"🔴 **Put Wall:** `{put_wall}`\n"
@@ -256,7 +287,7 @@ def process_asset(key):
                 "inline": False
             },
             {
-                "name": "📊 OPEN INTEREST MATRIX",
+                "name": "📊 OPEN INTEREST MATRIX (High → Low)",
                 "value": chart,
                 "inline": False
             },
