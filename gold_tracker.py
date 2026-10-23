@@ -490,7 +490,7 @@ def get_spot_gold():
     """ดึงราคาทอง Spot (XAU/USD) พร้อม fallback chain ป้องกัน US IP block."""
     sources = [
         (
-            "Binance Vision (PAXG)",
+            "Binance Vision",
             "https://data-api.binance.vision/api/v3/ticker/price?symbol=PAXGUSDT",
             lambda d: float(d["price"]),
         ),
@@ -579,7 +579,7 @@ def find_walls(calls, puts, price):
 # ══════════════════════════════════════════════════════
 
 def make_ascii_chart(calls, puts, price, max_pain, call_wall, put_wall, n=10):
-    """สร้าง ASCII OI chart (เรียงจากบนลงล่าง ตรงกับ TradingView)."""
+    """สร้าง ASCII OI chart แบบกระชับ (กว้างเพียง 25 ตัวอักษร ไม่ตกบรรทัดบนมือถือ)."""
     strikes = sorted(set(calls.keys()) | set(puts.keys()))
     strikes = [s for s in strikes if calls.get(s, 0) > 0 or puts.get(s, 0) > 0]
     if not strikes:
@@ -593,12 +593,13 @@ def make_ascii_chart(calls, puts, price, max_pain, call_wall, put_wall, n=10):
         (max(calls.get(s, 0), puts.get(s, 0)) for s in subset), default=1
     ) or 1
 
-    lines = ["```", f"{'STRIKE':>8} | {'CALL OI':^9} | {'PUT OI':^9}"]
-    lines.append("-" * 34)
+    lines = ["```", f"{'STRIKE':>6} | {'CALL':^4} | {'PUT':^4}"]
+    lines.append("-" * 21)
 
     for s in subset:
-        c_bar = "█" * int(calls.get(s, 0) / max_oi * 7)
-        p_bar = "█" * int(puts.get(s, 0) / max_oi * 7)
+        s_str = f"{int(s)}" if s == int(s) else f"{s:.1f}"
+        c_bar = "█" * int(calls.get(s, 0) / max_oi * 4)
+        p_bar = "█" * int(puts.get(s, 0) / max_oi * 4)
         tag = ""
         if abs(s - price) == min(abs(x - price) for x in subset):
             tag = " ←NOW"
@@ -608,7 +609,7 @@ def make_ascii_chart(calls, puts, price, max_pain, call_wall, put_wall, n=10):
             tag = " ←CALL"
         elif put_wall is not None and s == put_wall:
             tag = " ←PUT"
-        lines.append(f"{s:>8} | {c_bar:<9} | {p_bar:<9}{tag}")
+        lines.append(f"{s_str:>6} | {c_bar:<4} | {p_bar:<4}{tag}")
 
     lines.append("```")
     return "\n".join(lines)
@@ -655,9 +656,8 @@ def process_asset(key):
         fw_cw, fw_pw = find_walls(fw_calls, fw_puts, price)
         if fw_cw is not None and fw_pw is not None:
             fw_info = (
-                f"\n📌 *Front-Week ({front_week['code']} | "
-                f"{front_week['dte']} DTE):*  "
-                f"Call `{fmt(fw_cw, d)}` / Put `{fmt(fw_pw, d)}`"
+                f"\n⚡ **Weekly ({front_week['dte']}D):** "
+                f"Call `{fmt(fw_cw, d)}` • Put `{fmt(fw_pw, d)}`"
             )
 
     # ─── 3. ดึง IV ───
@@ -692,7 +692,7 @@ def process_asset(key):
                     f"🪙 **Spot (XAU):** `{spot}` "
                     f"*(Spread: `{spread_sign}{unit}`)*"
                 )
-                spot_note = f"\n*Spot via {spot_source} (PAXG proxy)*"
+                spot_note = f"\n*Spot: {spot_source} (PAXG)*"
             else:
                 log.warning(f"Spot/Futures spread too large ({spread}), ignoring spot")
                 price_display = f"💰 **Futures Price:** `{fmt(price, d)}`"
@@ -704,9 +704,9 @@ def process_asset(key):
     # ─── 8. สร้าง Discord Embed ───
     now = datetime.now(TZ).strftime("%Y-%m-%d %H:%M")
 
-    expiry_label = f"{front['code']} | {front['dte']} DTE"
-    if front["expires_date"]:
-        expiry_label += f" | Exp: {front['expires_date']}"
+    exp_short = front["expires_date"].replace("/2026", "/26").replace("/2027", "/27") if front["expires_date"] else ""
+    exp_suffix = f" • Exp {exp_short}" if exp_short else ""
+    expiry_label = f"{front['code']} ({front['dte']} DTE){exp_suffix}"
 
     embed = {
         "title": f"{cfg['icon']} {cfg['name']} — Options & Vol2Vol",
@@ -743,9 +743,7 @@ def process_asset(key):
                 "inline": False,
             },
             {
-                "name": (
-                    f"📊 OPEN INTEREST — {front['code']} (High → Low)"
-                ),
+                "name": f"📊 OPEN INTEREST — {front['code']}",
                 "value": chart if chart else "ไม่มีข้อมูล OI สำหรับ expiry นี้",
                 "inline": False,
             },
