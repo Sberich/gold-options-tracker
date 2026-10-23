@@ -1,4 +1,4 @@
-name: Gold Options Daily Tracker
+name: CME Options & Vol2Vol Tracker v2.0
 on:
   schedule:
     - cron: '0 1 * * 1-5'    # 08:00 น. ไทย
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       asset:
-        description: 'Asset to run (gold, silver, oil, sp500, nasdaq, all)'
+        description: 'Asset to run (gold, silver, oil, sp500, nasdaq, btc, all)'
         required: false
         default: 'all'
 
@@ -28,7 +28,7 @@ jobs:
       - name: 📦 Install dependencies
         run: pip install -r requirements.txt
 
-      - name: 🚀 Run Multi-Asset CME Tracker
+      - name: 🚀 Run CME Options Tracker v2.0
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           TARGET_ASSET: ${{ github.event.inputs.asset || 'all' }}
